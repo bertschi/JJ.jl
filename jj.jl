@@ -78,6 +78,10 @@ function Combined(parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
     Combined{T,O,I+O,typeof(parts)}(parts)
 end
 
+function Combined(parts::AbstractArray{T,N}) where {T,N}
+    Combined{T,N,N,typeof(parts)}(parts)
+end
+
 Base.axes(x::Combined) = (axes(x.parts)..., axes(first(x.parts))...)
 
 Base.size(x::Combined) = map(length, axes(x))
