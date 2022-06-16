@@ -36,26 +36,36 @@ struct Framed{T,M,N,A} <: AbstractArray{T,M}
     data::A
 end
 
-function Framed{T,M}(data::AbstractArray{T,N}) where {T,M,N}
-    @assert M <= N
-    Framed{T,M,N,typeof(data)}(data)
+function Framed{ET,M}(data::AbstractArray{T,N}) where {ET,M,N,T}
+    @assert M < N
+    Framed{ET,M,N,typeof(data)}(data)
+end
+
+function frameindex(ax, I)
+    M = length(I)
+    ntuple(i -> if i > M ax[i] else I[i] end, length(ax))
 end
 
 function Framed(data::AbstractArray, framerank::Int)
-    Framed{eltype(data),framerank}(data)
+    ET = typeof(view(data, frameindex(axes(data), ntuple(i->1, framerank))...))
+    Framed{ET,framerank}(data)
 end
 
 Base.axes(A::Framed{T,M}) where {T,M} = axes(A.data)[1:M]
 
 Base.size(A::Framed) = map(length, axes(A))
 
-frameindex(ax, I) = (I..., ax[(length(I)+1):end]...)
-
 function Base.getindex(A::Framed{T,M}, I::Vararg{Int,M}) where {T,M}
     view(A.data, frameindex(axes(A.data), I)...)
 end
 
-# Note: Somehow non-scalar indexing does not work ... works with Combined though?!?
+function frame(data::AbstractArray{T,N}, framerank::Int) where {T,N}
+    if framerank >= N
+        data
+    else
+        Framed(data, framerank)
+    end
+end
 
 struct Combined{T,M,N,A} <: AbstractArray{T,N}
     parts::A
@@ -86,7 +96,7 @@ function Base.getindex(x::Combined{T,M,N,A}, I::Vararg{Int,N}) where {T,M,N,A}
 end
 
 function ranked(fun, r::Integer, x::AbstractArray)
-    Combined(map(fun, Framed(x, max(ndims(x) - r, 0))))
+    Combined(map(fun, frame(x, max(ndims(x) - r, 0))))
 end
 
 # Test some of this ... maybe on K-means
@@ -102,10 +112,10 @@ end
 
 X = iota(4, 7)'
 mu = iota(4, 3)'
-d = table(dist2, Framed(X, 1), Framed(mu, 1))
+d = table(dist2, frame(X, 1), frame(mu, 1))
 
 function insert(fun, x)
-    reduce(fun, Framed(x, 1))
+    reduce(fun, frame(x, 1))
 end
 
 bc(fun) = (args...) -> fun.(args...)
@@ -113,12 +123,33 @@ bc(fun) = (args...) -> fun.(args...)
 r = d .== ranked(x -> insert(bc(min), x), 1, d)
 
 function kmeans(X, mu)
-    d = table(dist2, Framed(X, 1), Framed(mu, 1))
+    d = table(dist2, frame(X, 1), frame(mu, 1))
     r = d .== ranked(x -> insert(bc(min), x), 1, d)
-    insert(+, Combined(map((x, y) -> table(bc(*), x, y), Framed(r, 1), Framed(X, 1)))) ./ insert(+, r)
+    insert(+, Combined(map((x, y) -> table(bc(*), x, y), frame(r, 1), frame(X, 1)))) ./ insert(+, r)
     # (r' * X) ./ sum(r; dims=1)'
 end
 
 # seems to work, but is not very nice (yet)
+
+# Let's try with type for Ranked function
+
+struct RankedMonad{F,N}
+    fun::F
+    rank::N
+end
+
+function (fr::RankedMonad)(x::AbstractArray)
+    ranked(fr.fun, fr.rank, x)
+end
+
+struct RankedDyad{F,M,N}
+    fun::F
+    leftrank::M
+    rightrank::N
+end
+
+function (fd::RankedDyad)(x::AbstractArray, y::AbstractArray)
+    
+end
 
 end # module
