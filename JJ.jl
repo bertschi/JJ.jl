@@ -161,8 +161,15 @@ function (fd::RankedDyad)(x, y)
             frame(y, max(ndims(y) - fd.rightrank, 0))))
 end
 
+function table(fd::RankedDyad, x, y)
+    x = frame(x, max(ndims(x) - fd.leftrank, 0))
+    y = frame(y, max(ndims(y) - fd.rightrank, 0))
+    Combined([fd.fun(x[i], y[j])
+              for i in eachindex(x), j in eachindex(y)])
+end
+
 function kmeans2(X, mu)
-    d = table(dist2, frame(X, 1), frame(mu, 1))
+    d = table(RankedDyad(dist2, 1, 1), X, mu)
     r = d .== RankedMonad(x -> insert(RankedDyad(min, 0, 0), x), 1)(d)
     RankedDyad(/, 0, 0)(
         insert(+, RankedDyad((x, y) -> table(RankedDyad(*, 0, 0), x, y), 1, 1)(r, X)),
