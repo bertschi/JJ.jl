@@ -67,6 +67,8 @@ function frame(data::AbstractArray{T,N}, framerank::Int) where {T,N}
     end
 end
 
+frame(data, framerank::Int) = data  # scalars stay themselves at any rank!
+
 struct Combined{T,M,N,A} <: AbstractArray{T,N}
     parts::A
 end
@@ -84,8 +86,11 @@ function Combined(parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
 end
 
 function Combined(parts::AbstractArray{T,N}) where {T,N}
-    Combined{T,N,N,typeof(parts)}(parts)
+    # Combined{T,N,N,typeof(parts)}(parts)
+    parts
 end
+
+Combined(parts) = parts  # special case for scalars
 
 Base.axes(x::Combined) = (axes(x.parts)..., axes(first(x.parts))...)
 
@@ -96,7 +101,7 @@ function Base.getindex(x::Combined{T,M,N,A}, I::Vararg{Int,N}) where {T,M,N,A}
 end
 
 function ranked(fun, r::Integer, x::AbstractArray)
-    Combined(map(fun, frame(x, max(ndims(x) - r, 0))))
+    Combined(broadcast(fun, frame(x, max(ndims(x) - r, 0))))
 end
 
 # Test some of this ... maybe on K-means
@@ -125,7 +130,7 @@ r = d .== ranked(x -> insert(bc(min), x), 1, d)
 function kmeans(X, mu)
     d = table(dist2, frame(X, 1), frame(mu, 1))
     r = d .== ranked(x -> insert(bc(min), x), 1, d)
-    insert(+, Combined(map((x, y) -> table(bc(*), x, y), frame(r, 1), frame(X, 1)))) ./ insert(+, r)
+    insert(+, Combined(broadcast((x, y) -> table(bc(*), x, y), frame(r, 1), frame(X, 1)))) ./ insert(+, r)
     # (r' * X) ./ sum(r; dims=1)'
 end
 
@@ -138,7 +143,7 @@ struct RankedMonad{F,N}
     rank::N
 end
 
-function (fr::RankedMonad)(x::AbstractArray)
+function (fr::RankedMonad)(x)
     ranked(fr.fun, fr.rank, x)
 end
 
@@ -148,8 +153,21 @@ struct RankedDyad{F,M,N}
     rightrank::N
 end
 
-function (fd::RankedDyad)(x::AbstractArray, y::AbstractArray)
-    
+function (fd::RankedDyad)(x, y)
+    Combined(
+        broadcast(
+            fd.fun,
+            frame(x, max(ndims(x) - fd.leftrank, 0)),
+            frame(y, max(ndims(y) - fd.rightrank, 0))))
+end
+
+function kmeans2(X, mu)
+    d = table(dist2, frame(X, 1), frame(mu, 1))
+    r = d .== RankedMonad(x -> insert(RankedDyad(min, 0, 0), x), 1)(d)
+    RankedDyad(/, 0, 0)(
+        insert(+, RankedDyad((x, y) -> table(RankedDyad(*, 0, 0), x, y), 1, 1)(r, X)),
+        insert(+, r))
+    # (r' * X) ./ sum(r; dims=1)'
 end
 
 end # module
