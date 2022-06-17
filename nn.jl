@@ -7,29 +7,9 @@ using ForwardDiff
 using ReverseDiff
 using ProgressBars
 using JuliennedArrays
+using ChainRulesCore
 
 include("JJ.jl")
-
-# TODO: Use ChainRules instead of Zygote adjoint
-
-Zygote.@adjoint Slices{Item,Dimensions,Whole,Alongs}(whole, alongs) where {Item,Dimensions,Whole,Alongs} =
-    Slices(whole, alongs...), Delta -> (Align(Delta, alongs...), map(_ -> nothing, alongs)...)
-
-Zygote.@adjoint Align{Item,Dimensions,Sliced,Alongs}(slices, alongs) where {Item,Dimensions,Sliced,Alongs} =
-    Align(slices, alongs...), Delta -> (Slices(Delta, alongs...), map(_ -> nothing, alongs)...)
-
-Zygote.refresh()
-
-# Zygote.@adjoint JJ.Framed(data, framerank) =
-#     JJ.Framed(data, framerank), Delta -> (JJ.combine(Delta), nothing)
-
-# framedim(::JJ.Combined{T,M,N,A}) where {T,M,N,A} = M
-# framedim(x) = ndims(x)
-
-# Zygote.@adjoint JJ.Combined(stuff) =
-#     JJ.combine(stuff), Delta -> (JJ.frame(Delta, framedim(Delta)), )
-
-# Zygote.refresh()
 
 function nn(x, params, act)
     JJ.RankedMonad(act, 0)(params.W * x + params.b)

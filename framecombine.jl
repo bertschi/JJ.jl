@@ -67,3 +67,13 @@ Base.size(x::Combined) = map(length, axes(x))
 function Base.getindex(x::Combined{T,M,N,A}, I::Vararg{Int,N}) where {T,M,N,A}
     x.parts[I[1:M]...][I[(M+1):end]...]
 end
+
+# define rules for AD
+
+function ChainRulesCore.rrule(::Type{Framed{T,M,N,A}}, data, framerank::Int) where {T,M,N,A}
+    frame(data, framerank), Delta -> (NoTangent(), combine(Delta), ZeroTangent())
+end
+
+function ChainRulesCore.rrule(::Type{Combined{T,M,N,A}}, parts) where {T,M,N,A}
+    combine(parts), Delta -> (NoTangent(), frame(Delta, M))
+end
