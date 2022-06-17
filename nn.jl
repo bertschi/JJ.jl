@@ -12,21 +12,25 @@ using ChainRulesCore
 include("JJ.jl")
 
 function nn(x, params, act)
-    JJ.RankedMonad(act, 0)(params.W * x + params.b)
+    JJ.ranked(act, 0)(params.W * x + params.b)
 end
+
+# adgrad(fun, args::AbstractVector) = ReverseDiff.gradient(fun, args)
+# adgrad(fun, args::AbstractVector) = ForwardDiff.gradient(fun, args)
+adgrad(fun, args::AbstractVector) = Zygote.gradient(fun, args)[1]
 
 function train_demo(x, y, params)
     ps, re = Flux.destructure(params)
     function loss(ps)
-        pred = JJ.RankedMonad(xi -> nn(xi, re(ps), tanh), 1)(x)
-        err = JJ.RankedDyad((xi, yi) -> sum((xi .- yi).^2), 1, 1)(pred, y)
+        pred = JJ.ranked(xi -> nn(xi, re(ps), tanh), 1)(x)
+        err = JJ.ranked(1, (xi, yi) -> sum((xi .- yi).^2), 1)(pred, y)
         JJ.insert(+, err)
     end
     opt = Flux.Optimise.ADAM(1e-1)
     iter = ProgressBar(1:100)
     for i in iter
         sleep(0.1)
-        grad = Zygote.gradient(loss, ps)[1]
+        grad = adgrad(loss, ps)
         Flux.Optimise.update!(opt, ps, grad)
         set_description(iter, "Loss: $(loss(ps))")
     end
@@ -41,10 +45,8 @@ W_true = rand(Normal(), Q, D)
 b_true = rand(Normal(), Q)
 
 X = randn(N, D)
-Y = JJ.RankedMonad(xi -> nn(xi, (W=W_true, b=b_true), tanh), 1)(X)
+Y = JJ.ranked(xi -> nn(xi, (W=W_true, b=b_true), tanh), 1)(X)
 
-train_demo(X,
-           Y,
-           (W = rand(Normal(0, 0.1), Q, D),
-            b = rand(Normal(0, 0.1), Q)))
-
+theta = (W = rand(Normal(0, 0.1), Q, D),
+         b = rand(Normal(0, 0.1), Q))
+train_demo(X, Y, theta)
