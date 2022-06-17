@@ -1,30 +1,18 @@
 
 using JuliennedArrays
 
-tally(x::Tuple) = length(x)
-tally(x::AbstractArray) = size(x, 1)
+frame(x, framerank::Int) = x
 
-shape(x::AbstractArray) = size(x)
-
-rank(x::AbstractArray) = tally(shape(x))
-rank(x) = 0
-
-function ranked(fun, r::Integer, x::AbstractArray)
-    n = rank(x)
-    r = min(r, n)  # effective rank
-    f = n - r  # frame rank
-    if f == 0
-        fun(x)
+function frame(data::AbstractArray{T,N}, frameindex::Int) where {T,N}
+    if frameindex < N
+        Slices(data, ntuple(i -> if i > frameindex True() else False() end, N)...)
     else
-        inner = f .+ (1:r)
-        split = Slices(x, inner...)
-        res = map(fun, split)
-        # find new inner dimension
-        ri = rank(res[eachindex(res)[1]])
-        if ri > 0
-            Align(res, (f .+ (1:ri))...)
-        else
-            res
-        end
+        data
     end
+end
+
+combine(x) = x
+
+function combine(parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
+    Align(parts, ntuple(i -> if i > O True() else False() end, I+O)...)
 end
