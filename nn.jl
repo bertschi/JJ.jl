@@ -4,6 +4,7 @@ using Distributions
 using Flux
 using Zygote
 using ForwardDiff
+using ReverseDiff
 using ProgressBars
 using JuliennedArrays
 
@@ -24,7 +25,7 @@ function train_demo(x, y, params)
     iter = ProgressBar(1:100)
     for i in iter
         sleep(0.1)
-        grad = ForwardDiff.gradient(loss, ps)
+        grad = ReverseDiff.gradient(loss, ps)
         Flux.Optimise.update!(opt, ps, grad)
         set_description(iter, "Loss: $(loss(ps))")
     end
