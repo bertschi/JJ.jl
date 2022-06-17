@@ -10,6 +10,27 @@ using JuliennedArrays
 
 include("JJ.jl")
 
+# TODO: Use ChainRules instead of Zygote adjoint
+
+Zygote.@adjoint Slices{Item,Dimensions,Whole,Alongs}(whole, alongs) where {Item,Dimensions,Whole,Alongs} =
+    Slices(whole, alongs...), Delta -> (Align(Delta, alongs...), map(_ -> nothing, alongs)...)
+
+Zygote.@adjoint Align{Item,Dimensions,Sliced,Alongs}(slices, alongs) where {Item,Dimensions,Sliced,Alongs} =
+    Align(slices, alongs...), Delta -> (Slices(Delta, alongs...), map(_ -> nothing, alongs)...)
+
+Zygote.refresh()
+
+# Zygote.@adjoint JJ.Framed(data, framerank) =
+#     JJ.Framed(data, framerank), Delta -> (JJ.combine(Delta), nothing)
+
+# framedim(::JJ.Combined{T,M,N,A}) where {T,M,N,A} = M
+# framedim(x) = ndims(x)
+
+# Zygote.@adjoint JJ.Combined(stuff) =
+#     JJ.combine(stuff), Delta -> (JJ.frame(Delta, framedim(Delta)), )
+
+# Zygote.refresh()
+
 function nn(x, params, act)
     JJ.RankedMonad(act, 0)(params.W * x + params.b)
 end
@@ -25,33 +46,12 @@ function train_demo(x, y, params)
     iter = ProgressBar(1:100)
     for i in iter
         sleep(0.1)
-        grad = ReverseDiff.gradient(loss, ps)
+        grad = Zygote.gradient(loss, ps)[1]
         Flux.Optimise.update!(opt, ps, grad)
         set_description(iter, "Loss: $(loss(ps))")
     end
     re(ps)
 end
-
-# TODO: Use ChainRules instead of Zygote adjoint
-
-Zygote.@adjoint Slices(whole, alongs) =
-    Slices(whole, alongs), Delta -> (Align(Delta, alongs), map(_ -> nothing, alongs)...)
-
-Zygote.@adjoint Align(slices, alongs) =
-    Align(slices, alongs), Delta -> (Slices(Delta, alongs), map(_ -> nothing, alongs)...)
-
-Zygote.refresh()
-
-# Zygote.@adjoint JJ.Framed(data, framerank) =
-#     JJ.Framed(data, framerank), Delta -> (JJ.combine(Delta), nothing)
-
-# framedim(::JJ.Combined{T,M,N,A}) where {T,M,N,A} = M
-# framedim(x) = ndims(x)
-
-# Zygote.@adjoint JJ.Combined(stuff) =
-#     JJ.combine(stuff), Delta -> (JJ.frame(Delta, framedim(Delta)), )
-
-# Zygote.refresh()
 
 # Quick demo
 N = 100
