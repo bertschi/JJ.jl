@@ -1,5 +1,6 @@
 
 using JuliennedArrays
+using ChainRulesCore
 
 """
     frame(x, framerank)

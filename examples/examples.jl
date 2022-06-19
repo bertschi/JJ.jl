@@ -1,4 +1,6 @@
 
+using JJ
+
 # Test some of this ... maybe on K-means
 
 dist2(x, y) = sum((x .- y).^2)

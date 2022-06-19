@@ -1,14 +1,12 @@
 module JJ
 
-using Zygote
-using ChainRulesCore
-
 # include("framecombine.jl")
 include("julienned.jl")
 include("ranked.jl")
 include("jfuns.jl")
-include("examples.jl")
 
-Zygote.refresh()  # ensure that chain rules are visible
+# export J-like functions
+export frame, ranked
+export table, insert, iota
 
 end # module

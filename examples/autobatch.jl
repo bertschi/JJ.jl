@@ -4,8 +4,7 @@
 using Random
 using Distributions
 using Flux
-
-include("JJ.jl")
+using JJ
 
 # generate fake binary classification dataset
 Random.seed!(10009)

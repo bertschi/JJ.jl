@@ -7,9 +7,7 @@ using ForwardDiff
 using ReverseDiff
 using ProgressBars
 using JuliennedArrays
-using ChainRulesCore
-
-include("JJ.jl")
+using JJ
 
 function nn(x, params, act)
     JJ.ranked(act, 0)(params.W * x + params.b)
