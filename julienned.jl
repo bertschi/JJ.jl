@@ -1,6 +1,15 @@
 
 using JuliennedArrays
 
+"""
+    frame(x, framerank)
+
+Splits argument `x` into `framerank` dimensional array of sub-arrays.
+If `framerank` is larger or equal to the dimension of `x` it is just
+returned unchanged.
+"""
+function frame end
+
 frame(x, framerank::Int) = x
 
 function frame(data::AbstractArray{T,N}, frameindex::Int) where {T,N}
@@ -10,6 +19,23 @@ function frame(data::AbstractArray{T,N}, frameindex::Int) where {T,N}
         data
     end
 end
+
+"""
+    combine(x)
+
+Combines array of arrays into a larger array. All sub-arrays must have
+the same size! If `x` does not contain any sub-arrays it is just
+returned unchanged.
+
+# Examples
+```julia-repl
+julia> combine([[1, 2, 3], [4, 5, 6]])
+2×3 Align{Int64, 2} with eltype Int64:
+ 1  2  3
+ 4  5  6
+```
+"""
+function combine end
 
 combine(x) = x
 
