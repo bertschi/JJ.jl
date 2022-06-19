@@ -1,6 +1,6 @@
 # JJ.jl
 
-Implementation of (some) J operators in Julia.
+Implementation of (some) [J](https://www.jsoftware.com) operators in Julia.
 
 ## Verb rank
 
@@ -26,7 +26,7 @@ Alternatively, we can *rank* the `tuple` function:
 ```julia
 import JJ
 
-JJ.ranked(tuple, 0)(arr)  # Pack each element (rank 0 scalar)
+JJ.ranked(tuple, 0)(arr)  # Pack each element (rank 0 scalar) ... same as tuple.(arr)
 JJ.ranked(tuple, 1)(arr)  # Pack each sub-vector (of rank 1)
 JJ.ranked(tuple, 2)(arr)  # Pack each sub-matrix (of rank 2)
 JJ.ranked(tuple, 3)(arr)  # Pack the whole array (of rank 3)
@@ -65,3 +65,41 @@ batched_test_beta = rand(Normal(), batch_size, num_features)
 # autobatch by applying vector function at rank 1
 @show JJ.ranked(log_joint, 1)(batched_test_beta)
 ```
+
+## Further operators
+
+As another example consider matrix multiplication.  Together with the
+J-like operators `insert` and `table` matrix multiplication can be
+expressed in several equivalent ways:
+
+```julia
+import JJ
+
+A = JJ.iota(2, 3)
+B = JJ.iota(3, 4)
+
+@show A * B  # standard matrix multiplication
+
+# In J notation: +/"1 A *"1/ |: B
+@show JJ.ranked(x -> JJ.insert(+, x), 1)(JJ.table(JJ.ranked(1, JJ.ranked(0, *, 0), 1), A, B'))
+
+# In J notation: +/ (|: A) */"1 B
+@show JJ.insert(+, JJ.ranked(1, (x,y) -> JJ.table(JJ.ranked(0, *, 0), x, y), 1)(A', B))
+```
+
+Obviously not as concise as in J, but enough to illustrate the power
+of these operators. For further examples see also my
+[blog](https://bertschi.github.io/thinkapl.html) post.
+
+Further inspiration:
+
+* [JuliennedArrays.jl](https://github.com/bramtayl/JuliennedArrays.jl)
+
+  Wonderful library to split-apply-combine n-dimensional arrays. Used
+  here to implement rank functionality.
+  
+* [Rank in a hurry](https://code.jsoftware.com/wiki/Vocabulary/EZRank)
+
+  Quick introduction to rank in J. Includes many additional examples
+  and links.
+
