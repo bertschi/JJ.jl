@@ -6,6 +6,7 @@ using ChainRulesCore
 # include("framecombine.jl")
 include("julienned.jl")
 include("ranked.jl")
+include("jfuns.jl")
 include("examples.jl")
 
 Zygote.refresh()  # ensure that chain rules are visible
