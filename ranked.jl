@@ -65,5 +65,14 @@ julia> ranked(1, /, 0)([1 2 3; 4 5 6], [1, 2])
  1.0  2.0  3.0
  2.0  2.5  3.0
 ```
+
+Same as `[1, 2, 3] .+ reshape(1:6, 3, 2)`
+```julia-repl
+julia> ranked(0, +, 0)([1, 2, 3], reshape(1:6, 3, 2))
+3×2 Matrix{Int64}:
+ 2  5
+ 4  7
+ 6  9
+```
 """
 ranked(leftrank::Integer, fun, rightrank::Integer) = RankedDyad(fun, leftrank, rightrank)
