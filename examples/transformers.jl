@@ -1,27 +1,54 @@
 
+
 # Transformer code ported from J
 
 using Flux
 using Distributions
+using JJ
 
-function logsoftmax(y::AbstractVector)
-    y .- logsumexp(y)
+import Transformers
+
+# create a small transformer layer and run it on an example
+
+T = 5  # seq length, i.e., number of input tokens
+D = 4  # embedding size
+B = 8  # batch size
+Q = 3  # attention head size
+P = 6  # size of positiowise hidden layer
+
+batch = rand(Normal(), D, T, B)
+
+H = 2  # number of heads
+trans = Transformers.Transformer(D, H, Q, P)
+
+@show size(batch)
+@show size(trans(batch))
+
+# own implementation of transfomer layer
+
+function softmax(y::AbstractVector)
+    # Note: defined on vectors only!
+    exp.(y .- logsumexp(y))
 end
 
+# dot product of vectors
 dot(x::AbstractVector, y::AbstractVector) = sum(x .* y)
 
-struct Head
+struct AttentionHead
     Wq
     Wk
     Wv
 end
 
-function (h::Head)(y)
-    q = y * h.Wq
-    k = y * h.Wk
-    v = y * h.Wv
-    att = ranked(logsoftmax, 1)(table(ranked(1, dot, 1), q, k) ./ sqrt(size(q)[end]))
-    exp.(att) * v
+const EmbeddedTokens = AbstractMatrix
+
+function (ah::AttentionHead)(y::EmbeddedTokens)
+    q = y * ah.Wq
+    k = y * ah.Wk
+    v = y * ah.Wv
+    att = ranked(softmax, 1)(table(ranked(1, dot, 1), q, k) ./ sqrt(size(q)[end]))
+    # table(ranked(1, dot, 1), q, k) is same as q * k'
+    att * v
 end
 
 struct MultiHead
@@ -29,55 +56,51 @@ struct MultiHead
     heads
 end
 
-function (m::MultiHead)(y)
-    res = ranked(0, (h, x) -> h(x), 2)(m.heads, y)
-    res = ranked(vec, 2)(permutedims(res, (2:length(size(res))..., 1)))
-    res * m.Wproj
-end
-
-T = 5
-D = 4
-Q = 3
-sentence = rand(Normal(), T, D)
-
-function randhead(D, Q)
-    Head(rand(Normal(), D, Q),
-         rand(Normal(), D, Q),
-         rand(Normal(), D, Q))
-end
-
-function randmultihead(H, D, Q)
-    MultiHead(rand(Normal(), H*Q, D),
-              [randhead(D, Q) for i in 1:H])
+function (mh::MultiHead)(y::EmbeddedTokens)
+    res = ranked(0, (h, x) -> h(x), 2)(mh.heads, y)  # apply all heads
+    # Note: * at rank 2 acts as matrix multiplication
+    insert(.+, ranked(2, *, 2)(res, mh.Wproj))  # proj all res and sum
 end
 
 struct LayerNorm
     shift
     scale
+    eps
 end
 
 function (l::LayerNorm)(y::AbstractVector)
-    l.shift .+ l.scale .* (y .- mean(y)) ./ std(y)
+    # Again only defined on vector!
+    l.shift .+ l.scale .* (y .- mean(y)) ./ (std(y; corrected=false) + l.eps)
 end
 
-struct MultiHeadAttention
+struct MyTransformer
     layernorm1
     multihead
     layernorm2
     mlp
 end
 
-function (mha::MultiHeadAttention)(y)
-    hidden = ranked(mha.layernorm1, 1)(y .+ mha.multihead(y))
-    ranked(mha.layernorm2, 1)(hidden .+ ranked(mha.mlp, 1)(hidden))
+function (trans::MyTransformer)(y::EmbeddedTokens)
+    hidden = ranked(trans.layernorm1, 1)(y .+ trans.multihead(y))
+    ranked(trans.layernorm2, 1)(hidden .+ ranked(trans.mlp, 1)(hidden))
 end
 
-att = MultiHeadAttention(
-    LayerNorm(0, 1),
-    randmultihead(7, D, Q),
-    LayerNorm(0, 1),
-    Chain(Dense(D, 6, relu), Dense(6, D, relu))
-)
+function MyTransformer(t::Transformers.Transformer)
+    # populate parameters from existing transformer layer
+    laynorm1 = LayerNorm(t.mhn.diag.β, t.mhn.diag.α, t.mhn.ϵ)
+    H = t.mh.head
+    QH, D = size(t.mh.ikproj.weight)
+    # Note: assuming bias of zero and identity σ
+    Q = div(QH, H)
+    mhs = AttentionHead.([reshape(t.mh.iqproj.weight, Q, H, D)[:, i, :]' for i = 1:H],
+                         [reshape(t.mh.ikproj.weight, Q, H, D)[:, i, :]' for i = 1:H],
+                         [reshape(t.mh.ivproj.weight, Q, H, D)[:, i, :]' for i = 1:H])
+    Wps = permutedims(reshape(t.mh.oproj.weight, D, Q, H), (3, 2, 1))
+    laynorm2 = LayerNorm(t.pwn.diag.β, t.pwn.diag.α, t.pwn.ϵ)
+    mlp = Chain(t.pw.din, t.pw.dout)
+    MyTransformer(laynorm1, MultiHead(Wps, mhs), laynorm2, mlp)
+end
+    
+mytrans = MyTransformer(trans)
 
-batch = rand(Normal(), 16, T, D)
-
+@show size(ranked(mytrans, 2)(permutedims(batch, (3, 2, 1))))
