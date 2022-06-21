@@ -86,7 +86,7 @@ function table(fd::RankedDyad, x::AbstractArray, y::AbstractArray)
     y = frame(y, max(ndims(y) - fd.rightrank, 0))
     combine(
         reshape([fd.fun(x[i], y[j])
-                 forg i in eachindex(x), j in eachindex(y)],
+                 for i in eachindex(x), j in eachindex(y)],
                 (size(x)..., size(y)...)))
 end
 
