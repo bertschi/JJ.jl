@@ -84,8 +84,10 @@ julia> table(ranked(1, (x, y) -> sum(x .* y), 1), reshape(1:6, 2, 3), reshape(1:
 function table(fd::RankedDyad, x::AbstractArray, y::AbstractArray)
     x = frame(x, max(ndims(x) - fd.leftrank, 0))
     y = frame(y, max(ndims(y) - fd.rightrank, 0))
-    combine([fd.fun(x[i], y[j])
-             for i in eachindex(x), j in eachindex(y)])
+    combine(
+        reshape([fd.fun(x[i], y[j])
+                 forg i in eachindex(x), j in eachindex(y)],
+                (size(x)..., size(y)...)))
 end
 
 """
