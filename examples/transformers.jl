@@ -40,6 +40,8 @@ struct AttentionHead
     Wv
 end
 
+Flux.@functor AttentionHead
+
 const EmbeddedTokens = AbstractMatrix
 
 function (ah::AttentionHead)(y::EmbeddedTokens)
@@ -56,6 +58,8 @@ struct MultiHead
     heads
 end
 
+Flux.@functor MultiHead
+
 function (mh::MultiHead)(y::EmbeddedTokens)
     res = ranked(0, (h, x) -> h(x), 2)(mh.heads, y)  # apply all heads
     # Note: * at rank 2 acts as matrix multiplication
@@ -68,6 +72,9 @@ struct LayerNorm
     eps
 end
 
+Flux.@functor LayerNorm
+Flux.trainable(l::LayerNorm) = (l.shift, l.scale)
+
 function (l::LayerNorm)(y::AbstractVector)
     # Again only defined on vector!
     l.shift .+ l.scale .* (y .- mean(y)) ./ (std(y; corrected=false) + l.eps)
@@ -79,6 +86,8 @@ struct MyTransformer
     layernorm2
     mlp
 end
+
+Flux.@functor MyTransformer
 
 function (trans::MyTransformer)(y::EmbeddedTokens)
     hidden = ranked(trans.layernorm1, 1)(y .+ trans.multihead(y))
