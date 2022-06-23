@@ -4,13 +4,15 @@
 
 using JuliennedArrays
 
-function fastframe end
+function fastenclose end
 
-fastframe(x, framerank::Int) = x
+fastenclose(x, rank::Val{M}) where {M}  = x
 
-function fastframe(data::AbstractArray{T,N}, frameindex::Int) where {T,N}
-    if frameindex < N
-        Slices(data, ntuple(i -> if i > N - frameindex False() else True() end, N)...)
+function fastenclose(data::AbstractArray{T,N}, rank::Val{M}) where {T,N,M}
+    # M is rank, i.e., frame = N - M
+    frame = max(N - M, 0)
+    if frame < N
+        Slices(data, ntuple(i -> if i > N - frame False() else True() end, N)...)
     else
         data
     end
@@ -21,7 +23,7 @@ function fastcombine end
 fastcombine(x) = x
 
 function fastcombine(parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
-    Align(parts, ntuple(i -> if i > I False() else True() end, I+O)...)
+    collect(Align(parts, ntuple(i -> if i > I False() else True() end, I+O)...))
 end
 
 makeagree(x, y) = (x, y)
@@ -34,34 +36,31 @@ end
 
 fbc2(fun, x, y) = broadcast(fun, makeagree(x, y)...)
 
-struct FastRankedMonad{F,N}
+struct FastRankedMonad{F,R}
     fun::F
-    rank::N
 end
 
-function (fr::FastRankedMonad)(x)
-    fastcombine(broadcast(fr.fun, fastframe(x, max(ndims(x) - fr.rank, 0))))
+function (fr::FastRankedMonad{F,R})(x) where {F,R}
+    fastcombine(broadcast(fr.fun, fastenclose(x, Val(R))))
 end
 
-struct FastRankedDyad{F,M,N}
+struct FastRankedDyad{F,L,R}
     fun::F
-    leftrank::M
-    rightrank::N
 end
 
-function (fd::FastRankedDyad)(x, y)
+function (fd::FastRankedDyad{F,L,R})(x, y) where {F,L,R}
     left, right = makeagree(
-        fastframe(x, max(ndims(x) - fd.leftrank, 0)),
-        fastframe(y, max(ndims(y) - fd.rightrank, 0)))
+        fastenclose(x, Val(L)),
+        fastenclose(y, Val(R)))
     fastcombine(
         broadcast(
             fd.fun,
             left, right))
 end
 
-fastranked(fun, rank::Integer) = FastRankedMonad(fun, rank)
+fastranked(fun, rank::Val{R}) where {R} = FastRankedMonad{typeof(fun),R}(fun)
 
-fastranked(leftrank::Integer, fun, rightrank::Integer) = FastRankedDyad(fun, leftrank, rightrank)
+fastranked(leftrank::Val{L}, fun, rightrank::Val{R}) where {L,R} = FastRankedDyad{typeof(fun),L,R}(fun)
 
 fastiota(dims...) = reshape((1:prod(dims)) .- 1, dims)
 
@@ -73,19 +72,22 @@ function fasttable(fun, x::AbstractArray, y::AbstractArray)
     fastcombine(broadcast(fun, xl, yr))
 end
 
-function fasttable(fd::FastRankedDyad, x::AbstractArray, y::AbstractArray)
-    xf = fastframe(x, max(ndims(x) - fd.leftrank, 0))
-    yf = fastframe(y, max(ndims(y) - fd.rightrank, 0))
+function fasttable(fd::FastRankedDyad{F,L,R}, x::AbstractArray, y::AbstractArray) where {F,L,R}
+    xf = fastenclose(x, Val(L))
+    yf = fastenclose(y, Val(R))
     xl = reshape(xf, (size(xf)..., ntuple(i -> 1, ndims(yf))...))
     yr = reshape(yf, (ntuple(i -> 1, ndims(xf))..., size(yf)...))
     fastcombine(broadcast(fd.fun, xl, yr))    
 end
 
-function fastinsert(fun, x; init=Base._InitialValue())
-    foldr(fun, fastframe(x, 1); init=init)
+function fastinsert(fun, x::AbstractArray{T,N}; init=Base._InitialValue()) where {T,N}
+    foldr(fun, fastenclose(x, Val(N-1)); init=init)
 end
 
 # Examples of this stuff
+
+using Distributions
+using Flux
 
 reversedims(x::AbstractArray) = permutedims(x, ndims(x):-1:1)
 
@@ -93,15 +95,15 @@ fdist2(x, y) = sum((x .- y).^2)
 
 fX = fastiota(4, 7)
 fmu = fastiota(4, 3)
-fd = fasttable(fdist2, fastframe(fmu, 1), fastframe(fX, 1))
+fd = fasttable(fastranked(Val(1), fdist2, Val(1)), fmu, fX)
 
-fr = fbc2(==, fd, fastranked(x -> fastinsert(fastranked(0, min, 0), x), 1)(fd))
+fr = fbc2(==, fd, fastranked(x -> fastinsert(fastranked(Val(0), min, Val(0)), x), Val(1))(fd))
 
 function fkmeans(fX, fmu)
-    fd = fasttable(fastranked(1, fdist2, 1), fmu, fX)
-    fr = fastranked(0, ==, 0)(fd, fastranked(x -> fastinsert(fastranked(0, min, 0), x), 1)(fd))
-    fastranked(0, /, 0)(
-        fastinsert(+, fastranked(1, (x, y) -> fasttable(fastranked(0, *, 0), x, y), 1)(fX, fr)),
+    fd = fasttable(fastranked(Val(1), fdist2, Val(1)), fmu, fX)
+    fr = fastranked(Val(0), ==, Val(0))(fd, fastranked(x -> fastinsert(fastranked(Val(0), min, Val(0)), x), Val(1))(fd))
+    fastranked(Val(0), /, Val(0))(
+        fastinsert(+, fastranked(Val(1), (x, y) -> fasttable(fastranked(Val(0), *, Val(0)), x, y), Val(1))(fX, fr)),
         fastinsert(+, fr))
 end
 
@@ -109,15 +111,15 @@ import Transformers
 
 # create a small transformer layer and run it on an example
 
-T = 5  # seq length, i.e., number of input tokens
-D = 4  # embedding size
-B = 8  # batch size
-Q = 3  # attention head size
-P = 6  # size of positiowise hidden layer
+T = 50  # seq length, i.e., number of input tokens
+D = 40  # embedding size
+B = 80  # batch size
+Q = 30  # attention head size
+P = 60  # size of positiowise hidden layer
 
 batch = rand(Normal(), D, T, B)
 
-H = 2  # number of heads
+H = 8  # number of heads
 trans = Transformers.Transformer(D, H, Q, P)
 
 @show size(batch)
@@ -133,10 +135,10 @@ end
 # dot product of vectors
 dot(x::AbstractVector, y::AbstractVector) = sum(x .* y)
 
-struct FastAttentionHead
-    Wq
-    Wk
-    Wv
+struct FastAttentionHead{T}
+    Wq::T
+    Wk::T
+    Wv::T
 end
 
 Flux.@functor FastAttentionHead
@@ -147,27 +149,27 @@ function (ah::FastAttentionHead)(y::EmbeddedTokens)
     q = ah.Wq * y
     k = ah.Wk * y
     v = ah.Wv * y
-    att = fastranked(softmax, 1)(fasttable(fastranked(1, dot, 1), k, q) ./ sqrt(size(q)[end]))
+    att = fastranked(softmax, Val(1))(fasttable(fastranked(Val(1), dot, Val(1)), k, q) ./ sqrt(size(q)[end]))
     v * att
 end
 
-struct FastMultiHead
-    Wproj
-    heads
+struct FastMultiHead{U,T}
+    Wproj::U
+    heads::T
 end
 
 Flux.@functor FastMultiHead
 
 function (mh::FastMultiHead)(y::EmbeddedTokens)
-    res = fastranked(0, (h, x) -> h(x), 2)(mh.heads, y)  # apply all heads
+    res = fastranked(Val(0), (h, x) -> h(x), Val(2))(mh.heads, y)  # apply all heads
     # Note: * at rank 2 acts as matrix multiplication
-    fastinsert(fastranked(0, +, 0), fastranked(2, *, 2)(mh.Wproj, res))  # proj all res and sum
+    fastinsert(fastranked(Val(0), +, Val(0)), fastranked(Val(2), *, Val(2))(mh.Wproj, res))  # proj all res and sum
 end
 
-struct FastLayerNorm
-    shift
-    scale
-    eps
+struct FastLayerNorm{U,T}
+    shift::U
+    scale::U
+    eps::T
 end
 
 Flux.@functor FastLayerNorm
@@ -178,18 +180,18 @@ function (l::FastLayerNorm)(y::AbstractVector)
     l.shift .+ l.scale .* (y .- mean(y)) ./ (std(y; corrected=false) + l.eps)
 end
 
-struct MyFastTransformer
-    layernorm1
-    multihead
-    layernorm2
-    mlp
+struct MyFastTransformer{U,V,S,T}
+    layernorm1::U
+    multihead::V
+    layernorm2::S
+    mlp::T
 end
 
 Flux.@functor MyFastTransformer
 
 function (trans::MyFastTransformer)(y::EmbeddedTokens)
-    hidden = fastranked(trans.layernorm1, 1)(y .+ trans.multihead(y))
-    fastranked(trans.layernorm2, 1)(hidden .+ fastranked(trans.mlp, 1)(hidden))
+    hidden = fastranked(trans.layernorm1, Val(1))(y .+ trans.multihead(y))
+    fastranked(trans.layernorm2, Val(1))(hidden .+ fastranked(trans.mlp, Val(1))(hidden))
 end
 
 function MyFastTransformer(t::Transformers.Transformer)
@@ -210,4 +212,4 @@ end
     
 myfasttrans = MyFastTransformer(trans)
 
-# @show size(ranked(mytrans, 2)(permutedims(batch, (3, 2, 1))))
+@show size(fastranked(myfasttrans, Val(2))(batch))
