@@ -62,6 +62,25 @@ fastranked(fun, rank::Val{R}) where {R} = FastRankedMonad{typeof(fun),R}(fun)
 
 fastranked(leftrank::Val{L}, fun, rightrank::Val{R}) where {L,R} = FastRankedDyad{typeof(fun),L,R}(fun)
 
+macro rank_str(str)
+    rx_dyad = r"^(\d+)\s+(.*)\s+(\d+)$"
+    m_dyad = match(rx_dyad, str)
+    if m_dyad == nothing
+        # Try monad
+        rx_monad = r"^(.*)\s+(\d+)$"
+        m_monad = match(rx_monad, str)
+        if m_monad == nothing
+            error("Invalid format: must be <expr> <rank> or <leftrank> <expr> <rightrank>")
+        else
+            e, r = Meta.parse.(m_monad.captures)
+            :(fastranked($(esc(e)), Val($r)))
+        end
+    else
+        l, e, r = Meta.parse.(m_dyad.captures)
+        :(fastranked(Val($l), $(esc(e)), Val($r)))
+    end
+end
+
 fastiota(dims...) = reshape((1:prod(dims)) .- 1, dims)
 
 fasttable(fun, x, y) = fun(x, y)
@@ -111,15 +130,15 @@ import Transformers
 
 # create a small transformer layer and run it on an example
 
-T = 50  # seq length, i.e., number of input tokens
-D = 40  # embedding size
-B = 80  # batch size
-Q = 30  # attention head size
-P = 60  # size of positiowise hidden layer
+T = 5  # seq length, i.e., number of input tokens
+D = 4  # embedding size
+B = 8  # batch size
+Q = 3  # attention head size
+P = 6  # size of positiowise hidden layer
 
 batch = rand(Normal(), D, T, B)
 
-H = 8  # number of heads
+H = 2  # number of heads
 trans = Transformers.Transformer(D, H, Q, P)
 
 @show size(batch)
@@ -149,8 +168,8 @@ function (ah::FastAttentionHead)(y::EmbeddedTokens)
     q = ah.Wq * y
     k = ah.Wk * y
     v = ah.Wv * y
-    # att = fastranked(softmax, Val(1))(fasttable(fastranked(Val(1), dot, Val(1)), k, q) ./ sqrt(size(q)[end]))
-    att = fastranked(softmax, Val(1))(fastranked(Val(2), (x, y) -> x' * y, Val(2))(k, q) ./ sqrt(size(q)[end]))
+    # att = fastranked(softmax, Val(1))(fasttable(fastranked(Val(1), dot, Val(1)), k, q) ./ sqrt(size(q)[1]))
+    att = rank"softmax 1"(fastranked(Val(2), (x, y) -> x' * y, Val(2))(k, q) ./ sqrt(size(q)[1]))
     v * att
 end
 
@@ -162,9 +181,9 @@ end
 Flux.@functor FastMultiHead
 
 function (mh::FastMultiHead)(y::EmbeddedTokens)
-    res = fastranked(Val(0), (h, x) -> h(x), Val(2))(mh.heads, y)  # apply all heads
+    res = rank"0 (h, x) -> h(x) 2"(mh.heads, y)  # apply all heads
     # Note: * at rank 2 acts as matrix multiplication
-    fastinsert(fastranked(Val(0), +, Val(0)), fastranked(Val(2), *, Val(2))(mh.Wproj, res))  # proj all res and sum
+    fastinsert(rank"0 + 0", rank"2 * 2"(mh.Wproj, res))  # proj all res and sum
 end
 
 struct FastLayerNorm{U,T}
@@ -191,8 +210,8 @@ end
 Flux.@functor MyFastTransformer
 
 function (trans::MyFastTransformer)(y::EmbeddedTokens)
-    hidden = fastranked(trans.layernorm1, Val(1))(y .+ trans.multihead(y))
-    fastranked(trans.layernorm2, Val(1))(hidden .+ fastranked(trans.mlp, Val(1))(hidden))
+    hidden = rank"trans.layernorm1 1"(y .+ trans.multihead(y))
+    rank"trans.layernorm2 1"(hidden .+ rank"trans.mlp 1"(hidden))
 end
 
 function MyFastTransformer(t::Transformers.Transformer)
