@@ -9,12 +9,10 @@ function fastenclose end
 fastenclose(x, rank::Val{M}) where {M}  = x
 
 function fastenclose(data::AbstractArray{T,N}, rank::Val{M}) where {T,N,M}
-    # M is rank, i.e., frame = N - M
-    frame = max(N - M, 0)
-    if frame < N
-        Slices(data, ntuple(i -> if i > N - frame False() else True() end, N)...)
-    else
+    if M == 0
         data
+    else
+        Slices(data, ntuple(i -> if i > M False() else True() end, N)...)
     end
 end
 
@@ -23,14 +21,16 @@ function fastcombine end
 fastcombine(x) = x
 
 function fastcombine(parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
-    collect(Align(parts, ntuple(i -> if i > I False() else True() end, I+O)...))
+    Align(parts, ntuple(i -> if i > I False() else True() end, I+O)...)
 end
 
 makeagree(x, y) = (x, y)
 
+_framerank(n::Integer, r::Integer) = max(0, n-r)
+
 function makeagree(left::AbstractArray{U,M}, right::AbstractArray{T,N}) where {U,M,T,N}
-    leftsize = (ntuple(i -> 1, max(0, N-M))..., size(left)...)
-    rightsize = (ntuple(i -> 1, max(0, M-N))..., size(right)...)
+    leftsize = (ntuple(i -> 1, _framerank(N, M))..., size(left)...)
+    rightsize = (ntuple(i -> 1, _framerank(M, N))..., size(right)...)
     reshape(left, leftsize), reshape(right, rightsize)
 end
 
@@ -66,18 +66,18 @@ fastiota(dims...) = reshape((1:prod(dims)) .- 1, dims)
 
 fasttable(fun, x, y) = fun(x, y)
 
-function fasttable(fun, x::AbstractArray, y::AbstractArray)
-    xl = reshape(x, (size(x)..., ntuple(i -> 1, ndims(y))...))
-    yr = reshape(y, (ntuple(i -> 1, ndims(x))..., size(y)...))
+function _fasttable(fun, x::AbstractArray, y::AbstractArray)
+    xl = reshape(x, (size(x)..., ntuple(i -> 1, ndims(y))...)...)
+    yr = reshape(y, (ntuple(i -> 1, ndims(x))..., size(y)...)...)
     fastcombine(broadcast(fun, xl, yr))
 end
 
+function fasttable(fun, x::AbstractArray, y::AbstractArray)
+    _fasttable(fun, x, y)
+end
+
 function fasttable(fd::FastRankedDyad{F,L,R}, x::AbstractArray, y::AbstractArray) where {F,L,R}
-    xf = fastenclose(x, Val(L))
-    yf = fastenclose(y, Val(R))
-    xl = reshape(xf, (size(xf)..., ntuple(i -> 1, ndims(yf))...))
-    yr = reshape(yf, (ntuple(i -> 1, ndims(xf))..., size(yf)...))
-    fastcombine(broadcast(fd.fun, xl, yr))    
+    _fasttable(fd.fun, fastenclose(x, Val(L)), fastenclose(y, Val(R)))
 end
 
 function fastinsert(fun, x::AbstractArray{T,N}; init=Base._InitialValue()) where {T,N}
@@ -149,7 +149,8 @@ function (ah::FastAttentionHead)(y::EmbeddedTokens)
     q = ah.Wq * y
     k = ah.Wk * y
     v = ah.Wv * y
-    att = fastranked(softmax, Val(1))(fasttable(fastranked(Val(1), dot, Val(1)), k, q) ./ sqrt(size(q)[end]))
+    # att = fastranked(softmax, Val(1))(fasttable(fastranked(Val(1), dot, Val(1)), k, q) ./ sqrt(size(q)[end]))
+    att = fastranked(softmax, Val(1))(fastranked(Val(2), (x, y) -> x' * y, Val(2))(k, q) ./ sqrt(size(q)[end]))
     v * att
 end
 
