@@ -26,12 +26,15 @@ end
 
 makeagree(x, y) = (x, y)
 
-_framerank(n::Integer, r::Integer) = max(0, n-r)
+function _expand(x::AbstractArray{T,M}, n::Val{N}) where {T,M,N}
+    sx = size(x)
+    m = N - M
+    reshape(x, ntuple(i -> if i > m sx[i-m] else 1 end, N))
+end
 
 function makeagree(left::AbstractArray{U,M}, right::AbstractArray{T,N}) where {U,M,T,N}
-    leftsize = (ntuple(i -> 1, _framerank(N, M))..., size(left)...)
-    rightsize = (ntuple(i -> 1, _framerank(M, N))..., size(right)...)
-    reshape(left, leftsize), reshape(right, rightsize)
+    NM = Val(max(N, M))
+    _expand(left, NM), _expand(right, NM)
 end
 
 fbc2(fun, x, y) = broadcast(fun, makeagree(x, y)...)
@@ -233,3 +236,13 @@ end
 myfasttrans = MyFastTransformer(trans)
 
 @show size(fastranked(myfasttrans, Val(2))(batch))
+
+using ChainRulesCore
+
+function ChainRulesCore.rrule(::typeof(fastcombine), parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
+    fastcombine(parts), Delta -> (NoTangent(), fastenclose(Delta, Val(I)))
+end
+
+function ChainRulesCore.rrule(::typeof(fastenclose), data::AbstractArray{T,N}, rank::Val{M}) where {T,N,M}
+    fastenclose(data, rank), Delta -> (NoTangent(), fastcombine(Delta), ZeroTangent())
+end
