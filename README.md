@@ -112,7 +112,7 @@ B = reshape(1:12, 3, 4)
 @show A * B  # standard matrix multiplication
 # In J notation: A +/ . * B
 
-@show rank"x -> insert(+, x) 1"(table(rank"1 rank\"0 * 0\" 1"(A', B)))
+@show rank"x -> insert(+, x) 1"(table(rank"1 rank\"0 * 0\" 1", A', B))
 # In J notation: +/"1 A *"1/ |: B
 
 # or slightly simpler using partial application and broadcasting instead of rank 0 function
