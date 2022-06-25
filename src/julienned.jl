@@ -1,39 +1,42 @@
 
 using JuliennedArrays
-using ChainRulesCore
 
 """
-    frame(x, framerank)
+    enframe(x, rank)
 
-Splits argument `x` into `framerank` dimensional array of sub-arrays.
-If `framerank` is larger or equal to the dimension of `x` it is just
-returned unchanged.
+Splits argument `x` into `rank` dimensional array of sub-arrays --
+starting from the front.  If `rank` is zero, `x` is just returned
+unchanged.
+
+In order to allow compile-time optimizations the rank is passed as a
+Val{N} type.
 """
-function frame end
+function enframe end
 
-frame(x, framerank::Int) = x
+enframe(x, rank::Val{M}) where {M}  = x
 
-function frame(data::AbstractArray{T,N}, frameindex::Int) where {T,N}
-    if frameindex < N
-        Slices(data, ntuple(i -> if i > frameindex True() else False() end, N)...)
-    else
+function enframe(data::AbstractArray{T,N}, rank::Val{M}) where {T,N,M}
+    if M == 0
         data
+    else
+        Slices(data, ntuple(i -> if i > M False() else True() end, N)...)
     end
 end
 
 """
     combine(x)
 
-Combines array of arrays into a larger array. All sub-arrays must have
-the same size! If `x` does not contain any sub-arrays it is just
-returned unchanged.
+Combines array of arrays into a larger array -- with the sub-array
+dimensions first. All sub-arrays must have the same size! If `x` does
+not contain any sub-arrays it is just returned unchanged.
 
 # Examples
 ```julia-repl
 julia> combine([[1, 2, 3], [4, 5, 6]])
-2×3 Align{Int64, 2} with eltype Int64:
- 1  2  3
- 4  5  6
+3×2 Align{Int64, 2} with eltype Int64:
+ 1  4
+ 2  5
+ 3  6
 ```
 """
 function combine end
@@ -41,15 +44,5 @@ function combine end
 combine(x) = x
 
 function combine(parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
-    Align(parts, ntuple(i -> if i > O True() else False() end, I+O)...)
-end
-
-# define rules for AD
-
-function ChainRulesCore.rrule(::Type{Slices{Item,Dimensions,Whole,Alongs}}, whole, alongs) where {Item,Dimensions,Whole,Alongs}
-    Slices(whole, alongs...), Delta -> (NoTangent(), Align(Delta, alongs...), map(_ -> ZeroTangent(), alongs)...)
-end
-
-function ChainRulesCore.rrule(::Type{Align{Item,Dimensions,Sliced,Alongs}}, slices, alongs) where {Item,Dimensions,Sliced,Alongs}
-    Align(slices, alongs...), Delta -> (NoTangent(), Slices(Delta, alongs...), map(_ -> ZeroTangent(), alongs)...)
+    Align(parts, ntuple(i -> if i > I False() else True() end, I+O)...)
 end

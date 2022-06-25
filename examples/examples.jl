@@ -1,21 +1,41 @@
 
 using JJ
 
-# Test some of this ... maybe on K-means
+# Some examples using JJ
+
+################################################################################
+# Different ways to implement matrix multiplication
+
+A = reshape(1:6, 2, 3)
+B = reshape(1:12, 3, 4)
+
+@show A * B  # standard matrix multiplication
+# In J notation: A +/ . * B
+
+@show rank"x -> insert(+, x) 1"(table(rank"1 rank\"0 * 0\" 1", A', B))
+# In J notation: +/"1 A *"1/ |: B
+
+# or slightly simpler using partial application and broadcasting instead of rank 0 function
+partial(f, args...) = (moreargs...) -> f(args..., moreargs...)
+@show rank"partial(insert, +) 1"(table(rank"1 .* 1", A', B))
+
+@show insert(+, rank"1 partial(table, .*) 1"(A, B'))
+# In J notation: +/ (|: A) */"1 B
+
+################################################################################
+# K-Means clustering
 
 dist2(x, y) = sum((x .- y).^2)
 
-X = iota(7, 4)
-mu = iota(3, 4)
-d = table(dist2, frame(X, 1), frame(mu, 1))
-
-r = d .== ranked(x -> insert(ranked(0, min, 0), x), 1)(d)
-
 function kmeans(X, mu)
-    d = table(ranked(1, dist2, 1), X, mu)
-    r = ranked(0, ==, 0)(d, ranked(x -> insert(ranked(0, min, 0), x), 1)(d))
-    ranked(0, /, 0)(
-        insert(+, ranked(1, (x, y) -> table(ranked(0, *, 0), x, y), 1)(r, X)),
+    d = table(rank"1 dist2 1", mu, X)
+    r = rank"0 == 0"(d, rank"x -> insert(rank\"0 min 0\", x) 1"(d))
+    rank"0 / 0"(
+        insert(+, rank"1 (x, y) -> table(rank\"0 * 0\", x, y) 1"(X, r)),
         insert(+, r))
-    # (r' * X) ./ sum(r; dims=1)'
 end
+
+X = reshape(1:28, 4, 7)
+mu = reshape(1:12, 4, 3)
+
+@show kmeans(X, mu)

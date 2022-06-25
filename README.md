@@ -14,87 +14,120 @@ Consider an `2 3 4` sized array
 arr = reshape(1:24, 2, 3, 4)
 ```
 
-and a function packing an element into a `tuple`. Then, we can pack
-each element via broadcasting, i.e.,
-
+and a function providing some information about a value:
 ```julia
-tuple.(arr)
+info(x) = "Some scalar $x"
+info(x::AbstractArray) = "Array of shape $(size(x))"
 ```
 
-Alternatively, we can *rank* the `tuple` function:
+Then, we can obtain information about each (scalar) element of an
+array via broadcasting, i.e.,
+
+```julia
+info.(arr)
+```
+
+Alternatively, we can *rank* the `info` function:
 
 ```julia
 using JJ
 
-ranked(tuple, 0)(arr)  # Pack each element (rank 0 scalar) ... same as tuple.(arr)
-ranked(tuple, 1)(arr)  # Pack each sub-vector (of rank 1)
-ranked(tuple, 2)(arr)  # Pack each sub-matrix (of rank 2)
-ranked(tuple, 3)(arr)  # Pack the whole array (of rank 3)
+rank"info 0"(arr)  # Info on each element (rank 0 scalar) ... same as info.(arr)
+rank"info 1"(arr)  # Info on each sub-vector (of rank 1)
+rank"info 2"(arr)  # Info on each sub-matrix (of rank 2)
+rank"info 3"(arr)  # Info on the whole array (of rank 3)
 ```
+
+Note that
+
+* sub-arrays are formed starting from the first dimensions[^noJ]
+
+[^noJ]: This is different from J, but more suitable for arrays stored
+    in column-major order. For easily comparing results with J the
+    function `reversedims` can be used.
+
+* the function is applied to each sub-array and must return results of
+  the same type. These are then automatically combined into an array[^SAC].
+
+[^SAC]: Ranking functions thereby provides a constraint version of the
+    more general *split-apply-combine* strategy. In my opinion, the
+    restricted, but very consistent model of J applying ranked
+    functions on n-dimensional arrays is well designed and allows for
+    surprisingly powerful and understandable code.
 
 Thereby, many array manipulations can be expressed in a conscice
 manner. In particular, *autobatching* ML-models is easily
 accomplished:
 
 ```julia
-# Autobatch example from Jax (https://jax.readthedocs.io/en/latest/notebooks/vmapped_log_probs.html)
+using Flux
 
-using Random
-using Distributions
+A = randn(2, 3, 5)  # a batch of 2x3 matrices
+B = randn(3, 4, 5)  # another batch
 
-using JJ
+A ⊠ B  # special batched matrix multiplication
 
-# generate fake binary classification dataset
-Random.seed!(10009)
+rank"2 * 2"(A, B)  # just rank the standard one!
 
-num_features = 10
-num_points = 100
+# Obviously this also works for complete models
+# and across multiple sets of batches:
+model = Dense(2, 4)
+rank"model 1"(A)
+```
 
-true_beta = rand(Normal(), num_features)
-all_x = rand(Normal(), num_points, num_features)
-y = rand(Normal(), num_points) .< Flux.sigmoid.(all_x * true_beta)
+Following J, ranking currently works for functions with one or two
+arguments only. In case of two arguments, the function is broadcasted
+across the left and right argument in order to be applied to all pairs
+of sub-arrays. Here, in contrast to standard julia broadcasting,
+missing dimensions are filled from the front in order to be consistent
+with sub-arrays being formed from the front, i.e.,
 
-function log_joint(beta::AbstractVector)
-    # Note that no `dims` parameter is provided to `sum`.
-    sum(logpdf.(Normal(0, 1), beta)) + sum(.- log.(1 .+ exp.(.- (2 .* y .- 1) .* (all_x * beta))))
-end
+```julia
+A = randn(2, 3, 5)
+B = randn(2, 3)
+C = randn(2, 5)
 
-batch_size = 12
-batched_test_beta = rand(Normal(), batch_size, num_features)
+dot(x, y) = sum(x .* y)  # function we want to use at rank 1 must work on vectors
 
-# autobatch by applying vector function at rank 1
-@show ranked(log_joint, 1)(batched_test_beta)
+rank"1 dot 1"(A, A)  # obviously works
+rank"1 dot 1"(A, B)  # does not work as 3x5 does not match 3
+rank"1 dot 1"(A, C)  # does work as 5 can be broadcasted over 3x5
 ```
 
 ## Further operators
 
 As another example consider matrix multiplication.  Together with the
 J-like operators `insert` and `table` matrix multiplication can be
-expressed in several equivalent ways:
+expressed in several equivalent ways[^matmul]:
+
+[^matmul]: While these are mathematically equivalent, direct matrix
+    multiplication is implemented more efficiently.
 
 ```julia
 using JJ
 
-A = iota(2, 3)
-B = iota(3, 4)
+A = reshape(1:6, 2, 3)
+B = reshape(1:12, 3, 4)
 
 @show A * B  # standard matrix multiplication
 # In J notation: A +/ . * B
 
-@show ranked(x -> insert(+, x), 1)(table(ranked(1, ranked(0, *, 0), 1), A, B'))
+@show rank"x -> insert(+, x) 1"(table(rank"1 rank\"0 * 0\" 1", A', B))
 # In J notation: +/"1 A *"1/ |: B
 
 # or slightly simpler using partial application and broadcasting instead of rank 0 function
 partial(f, args...) = (moreargs...) -> f(args..., moreargs...)
-@show ranked(partial(insert, +), 1)(table(ranked(1, .*, 1), A, B'))
+@show rank"partial(insert, +) 1"(table(rank"1 .* 1", A', B))
 
-@show insert(+, ranked(1, partial(table, .*), 1)(A', B))
+@show insert(+, rank"1 partial(table, .*) 1"(A, B'))
 # In J notation: +/ (|: A) */"1 B
 ```
 
 Obviously not as concise as in J, but enough to illustrate the power
-of these operators. For further examples see also my
-[blog](https://bertschi.github.io/thinkapl.html) post.
+of these operators. For further examples, e.g., K-Means and
+Transformer layers in J, see also my
+[blog](https://bertschi.github.io/thinkapl.html) post[^JJ] or the
+examples directory.
 
 Further inspiration:
 
@@ -107,4 +140,3 @@ Further inspiration:
 
   Quick introduction to rank in J. Includes many additional examples
   and links.
-
