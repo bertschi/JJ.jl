@@ -126,8 +126,8 @@ partial(f, args...) = (moreargs...) -> f(args..., moreargs...)
 Obviously not as concise as in J, but enough to illustrate the power
 of these operators. For further examples, e.g., K-Means and
 Transformer layers in J, see also my
-[blog](https://bertschi.github.io/thinkapl.html) post[^JJ] or the
-examples directory.
+[blog](https://bertschi.github.io/thinkapl.html) post or the examples
+directory.
 
 Further inspiration:
 
