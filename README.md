@@ -16,7 +16,7 @@ arr = reshape(1:24, 2, 3, 4)
 
 and a function providing some information about a value:
 ```julia
-info(x) = "Some scalar"
+info(x) = "Some scalar $x"
 info(x::AbstractArray) = "Array of shape $(size(x))"
 ```
 
@@ -90,7 +90,7 @@ C = randn(2, 5)
 dot(x, y) = sum(x .* y)  # function we want to use at rank 1 must work on vectors
 
 rank"1 dot 1"(A, A)  # obviously works
-rank"1 dot 1"(A, B)  # does not work 3x5 does not match 3
+rank"1 dot 1"(A, B)  # does not work as 3x5 does not match 3
 rank"1 dot 1"(A, C)  # does work as 5 can be broadcasted over 3x5
 ```
 
