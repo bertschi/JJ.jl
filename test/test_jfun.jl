@@ -23,7 +23,10 @@ end
     v = randn(rng, 10)
     u = randn(rng, 20)
     @test JJ.table(JJ.rank"1 (x, y) -> sum(x .* y) 1", A, v) ≈ (v' * A)'
+    # TODO: This is currently broken!
+    # @test JJ.table(JJ.rank"1 (x, y) -> sum(x .* y) 1", u, v) ≈ u' * v
     @test JJ.table(JJ.rank"1 (x, y) -> sum(x .* y) 0", A, u) ≈ [sum(A[:, i] .* u[j]) for i in axes(A, 2), j in axes(u, 1)]
     @test JJ.table(*, A, 2.0) ≈ 2.0 * A
     @test JJ.table(JJ.rank"1 ./ 1", 3.0, A) ≈ 3.0 ./ A
+    @test JJ.table(*, 2, 3) == 6
 end
