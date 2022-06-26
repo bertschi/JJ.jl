@@ -1,0 +1,11 @@
+language: julia
+
+julia:
+    - 1.6
+    - release
+
+os:
+    - linux
+    - osx
+
+codecov: true
