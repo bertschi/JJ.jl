@@ -25,7 +25,7 @@ makeagree(x, y) = (x, y)
 function _expand(x::AbstractArray{T,M}, n::Val{N}) where {T,M,N}
     sx = size(x)
     m = N - M
-    reshape(x, ntuple(i -> if i > m sx[i-m] else 1 end, N))
+    reshape(x, ntuple(i -> if i > m sx[i-m] else 1 end, Val(N)))
 end
 
 function makeagree(left::AbstractArray{U,M}, right::AbstractArray{T,N}) where {U,M,T,N}

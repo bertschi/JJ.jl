@@ -19,7 +19,7 @@ function enframe(data::AbstractArray{T,N}, rank::Val{M}) where {T,N,M}
     if M == 0
         data
     else
-        ja.Slices(data, ntuple(i -> if i > M ja.False() else ja.True() end, N)...)
+        ja.Slices(data, ntuple(i -> if i > M ja.False() else ja.True() end, Val(N))...)
     end
 end
 
@@ -44,5 +44,5 @@ function combine end
 combine(x) = x
 
 function combine(parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
-    ja.Align(parts, ntuple(i -> if i > I ja.False() else ja.True() end, I+O)...)
+    ja.Align(parts, ntuple(i -> if i > I ja.False() else ja.True() end, Val(I+O))...)
 end
