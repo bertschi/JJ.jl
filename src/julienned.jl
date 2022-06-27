@@ -1,5 +1,5 @@
 
-using JuliennedArrays
+import JuliennedArrays as ja
 
 """
     enframe(x, rank)
@@ -19,7 +19,7 @@ function enframe(data::AbstractArray{T,N}, rank::Val{M}) where {T,N,M}
     if M == 0
         data
     else
-        Slices(data, ntuple(i -> if i > M False() else True() end, N)...)
+        ja.Slices(data, ntuple(i -> if i > M ja.False() else ja.True() end, N)...)
     end
 end
 
@@ -44,5 +44,5 @@ function combine end
 combine(x) = x
 
 function combine(parts::AbstractArray{<:AbstractArray{T,I}, O}) where {T,I,O}
-    Align(parts, ntuple(i -> if i > I False() else True() end, I+O)...)
+    ja.Align(parts, ntuple(i -> if i > I ja.False() else ja.True() end, I+O)...)
 end
