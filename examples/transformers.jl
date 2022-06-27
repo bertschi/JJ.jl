@@ -48,7 +48,7 @@ function (ah::AttentionHead)(y::EmbeddedTokens)
     q = ah.Wq * y
     k = ah.Wk * y
     v = ah.Wv * y
-    att = rank"softmax 1"(ranked(Val(2), (x, y) -> x' * y, Val(2))(k, q) ./ sqrt(size(q)[1]))
+    att = rank"softmax 1"(rank"2 (x, y) -> x' * y 2"(k, q) ./ sqrt(size(q)[1]))
     v * att
 end
 

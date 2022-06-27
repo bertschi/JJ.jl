@@ -29,9 +29,10 @@ dist2(x, y) = sum((x .- y).^2)
 
 function kmeans(X, mu)
     d = table(rank"1 dist2 1", mu, X)
-    r = rank"0 == 0"(d, rank"x -> insert(rank\"0 min 0\", x) 1"(d))
+    # Note: .op and rank"0 op 0" are not the same as arguments are broadcasted differently
+    r = rank"0 == 0"(d, rank"partial(insert, min) 1"(d))
     rank"0 / 0"(
-        insert(+, rank"1 (x, y) -> table(rank\"0 * 0\", x, y) 1"(X, r)),
+        insert(+, rank"1 partial(table, *) 1"(X, r)),
         insert(+, r))
 end
 
